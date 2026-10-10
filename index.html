@@ -1,5 +1,67 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>アイカツスターズ！所持チェック</title><style>
-:root{--blue:#478fd4;--ink:#24435d}*{box-sizing:border-box}body{margin:0;background:#f4f9ff;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif}header{background:linear-gradient(135deg,#75d0f3,#8e9df5);color:white;text-align:center;padding:18px 12px}h1{font-size:21px;margin:0 0 4px}main{max-width:1100px;margin:auto;padding:10px}.tools{background:#fff;padding:10px;border-radius:14px;box-shadow:0 2px 10px #b9d5ec55;position:sticky;top:0;z-index:2}.line{display:flex;gap:8px;align-items:center;flex-wrap:wrap}select,button{font:inherit;border:1px solid #c7ddef;border-radius:10px;padding:9px;background:#fff;color:var(--ink)}.switch button.active{background:var(--blue);color:white;border-color:var(--blue)}#progress{font-size:12px;margin-top:8px}#grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:10px}.card{background:white;border:2px solid #d8e8f8;border-radius:10px;padding:4px;min-width:0;cursor:pointer;position:relative}.card img{display:block;width:100%;aspect-ratio:3/4;object-fit:contain;border-radius:6px}.card.owned{border-color:#4a95d9;box-shadow:0 0 0 1px #4a95d9}.card.owned:after{content:'✓';position:absolute;top:4px;right:4px;background:#438fd5;color:white;border-radius:50%;width:23px;height:23px;display:grid;place-items:center;font-weight:bold}.card .state{font-size:11px;text-align:center;padding:5px 0;color:#71869a}.card.owned .state{color:#2879bf;font-weight:bold}@media(min-width:700px){main{padding:16px}#grid{gap:10px}.card{padding:6px}}
-</style></head><body><header><h1>アイカツスターズ！</h1><div>1弾〜3弾 所持チェック</div></header><main><section class="tools"><div class="line"><select id="set"><option value="all">すべての弾</option><option value="1">1弾</option><option value="2">2弾</option><option value="3">3弾</option></select><select id="status"><option value="all">所持・未所持すべて</option><option value="no">未所持のみ</option><option value="yes">所持のみ</option></select><span class="switch"><button id="b3" class="active">3列</button><button id="b6">6列</button></span></div><div id="progress">読み込み中…</div></section><div id="grid"></div></main><script>
-let cards=[],owned={};try{owned=JSON.parse(localStorage.getItem('stars123Owned')||'{}')}catch(e){}const grid=document.querySelector('#grid'),ss=document.querySelector('#set'),st=document.querySelector('#status');let cols=3;function render(){grid.style.gridTemplateColumns=`repeat(${cols},minmax(0,1fr))`;let shown=cards.filter(c=>(ss.value==='all'||c.set===ss.value)&&(st.value==='all'||(st.value==='yes'?!!owned[c.id]:!owned[c.id])));grid.replaceChildren();for(const c of shown){let a=document.createElement('article');a.className='card'+(owned[c.id]?' owned':'');let im=document.createElement('img');im.loading='lazy';im.src=c.image;im.alt='';let state=document.createElement('div');state.className='state';state.textContent=owned[c.id]?'所持済':'未所持';a.append(im,state);a.onclick=()=>{owned[c.id]=!owned[c.id];try{localStorage.setItem('stars123Owned',JSON.stringify(owned))}catch(e){}render()};grid.append(a)}let have=cards.filter(c=>owned[c.id]).length;document.querySelector('#progress').textContent=`全${cards.length}枚｜所持 ${have}枚・未所持 ${cards.length-have}枚｜表示 ${shown.length}枚`;document.querySelector('#b3').classList.toggle('active',cols===3);document.querySelector('#b6').classList.toggle('active',cols===6)}document.querySelector('#b3').onclick=()=>{cols=3;render()};document.querySelector('#b6').onclick=()=>{cols=6;render()};ss.onchange=st.onchange=render;fetch('cards.json').then(r=>r.json()).then(d=>{cards=d;render()}).catch(()=>document.querySelector('#progress').textContent='cards.jsonを読み込めません。GitHubにファイル一式を配置してください。');
-</script></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>アイカツスターズ！所持チェック</title>
+<style>
+:root{--blue:#478fd4;--ink:#24435d}
+*{box-sizing:border-box}
+body{margin:0;background:#f4f9ff;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif}
+header{background:linear-gradient(135deg,#75d0f3,#8e9df5);color:white;text-align:center;padding:18px 12px}
+h1{font-size:21px;margin:0 0 4px}
+main{max-width:1100px;margin:auto;padding:10px}
+.tools{background:#fff;padding:10px;border-radius:14px;box-shadow:0 2px 10px #b9d5ec55;position:sticky;top:0;z-index:2}
+.line{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+select,button{font:inherit;border:1px solid #c7ddef;border-radius:10px;padding:9px;background:#fff;color:var(--ink)}
+button.active{background:var(--blue);color:white;border-color:var(--blue)}
+#progress{font-size:12px;margin-top:8px}
+#grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:12px}
+.card{padding:0;border:2px solid transparent;border-radius:9px;overflow:hidden;background:white;position:relative;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center}
+.card img{width:100%;height:100%;object-fit:contain;display:block}
+.card.owned{border-color:#4b9de0}
+.card.owned:after{content:"✓";position:absolute;right:5px;top:5px;width:25px;height:25px;border-radius:50%;background:#318ad4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:bold;box-shadow:0 1px 5px #3335}
+#grid.cols6{grid-template-columns:repeat(6,minmax(0,1fr));gap:3px}
+#grid.cols6 .card{border-radius:5px}
+@media(max-width:480px){main{padding:7px}.tools{padding:8px}select,button{padding:8px;font-size:14px}#grid{gap:5px}}
+</style>
+</head>
+<body>
+<header><h1>アイカツスターズ！所持チェック</h1><div>カードをタップして所持・未所持を切り替え</div></header>
+<main>
+<section class="tools">
+<div class="line">
+<select id="series" aria-label="弾を選択"><option value="all">すべて</option><option value="1">1弾</option><option value="2">2弾</option><option value="3">3弾</option></select>
+<button id="c3" class="active" type="button">3列</button><button id="c6" type="button">6列</button>
+<button id="reset" type="button">所持状態をリセット</button>
+</div>
+<div id="progress">読み込み中…</div>
+</section>
+<div id="grid"></div>
+</main>
+<script>
+const grid=document.getElementById('grid'), series=document.getElementById('series'), progress=document.getElementById('progress');
+let cards=[], owned={}; try{owned=JSON.parse(localStorage.getItem('starsOwnedV2')||'{}')||{}}catch(e){}
+function save(){try{localStorage.setItem('starsOwnedV2',JSON.stringify(owned))}catch(e){}}
+function render(){
+ const s=series.value, list=cards.filter(c=>s==='all'||c.set===s);
+ grid.innerHTML='';
+ for(const c of list){
+  const b=document.createElement('button'); b.type='button'; b.className='card'+(owned[c.id]?' owned':''); b.setAttribute('aria-label',owned[c.id]?'所持済み':'未所持');
+  const im=document.createElement('img'); im.loading='lazy'; im.alt=''; im.src=c.image; b.appendChild(im);
+  b.addEventListener('click',()=>{owned[c.id]=!owned[c.id];save();b.classList.toggle('owned',!!owned[c.id]);b.setAttribute('aria-label',owned[c.id]?'所持済み':'未所持');updateProgress()});
+  grid.appendChild(b);
+ }
+ updateProgress();
+}
+function updateProgress(){
+ const s=series.value, list=cards.filter(c=>s==='all'||c.set===s), n=list.filter(c=>owned[c.id]).length;
+ progress.textContent=`${s==='all'?'すべて':s+'弾'}：${n} / ${list.length} 枚 所持`;
+}
+series.addEventListener('change',render);
+document.getElementById('c3').addEventListener('click',()=>{grid.classList.remove('cols6');document.getElementById('c3').classList.add('active');document.getElementById('c6').classList.remove('active')});
+document.getElementById('c6').addEventListener('click',()=>{grid.classList.add('cols6');document.getElementById('c6').classList.add('active');document.getElementById('c3').classList.remove('active')});
+document.getElementById('reset').addEventListener('click',()=>{if(confirm('保存した所持状態をすべてリセットしますか？')){owned={};save();render()}});
+fetch('cards.json').then(r=>{if(!r.ok)throw Error();return r.json()}).then(d=>{cards=d;render()}).catch(()=>{progress.textContent='cards.jsonを読み込めませんでした。index.htmlとcards.jsonを同じ場所に置いてください。'});
+</script>
+</body></html>
