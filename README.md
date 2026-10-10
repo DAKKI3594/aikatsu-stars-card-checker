@@ -1,0 +1,1 @@
+# aikatsu-stars-card-checker
