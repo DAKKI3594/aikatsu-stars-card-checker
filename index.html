@@ -1,4 +1,4 @@
-
+```html
 <!doctype html>
 <html lang="ja">
 <head>
@@ -8,7 +8,7 @@
 <style>
 :root{--blue:#478fd4;--ink:#24435d}
 *{box-sizing:border-box}
-body{margin:0;background:#f4f9ff;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif}
+body{margin:0;background:#f4f9ff;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}
 header{background:linear-gradient(135deg,#75d0f3,#8e9df5);color:white;text-align:center;padding:18px 12px}
 h1{font-size:21px;margin:0 0 4px}
 main{max-width:1100px;margin:auto;padding:10px}
@@ -21,7 +21,7 @@ button.active{background:var(--blue);color:white;border-color:var(--blue)}
 .card{padding:0;border:2px solid transparent;border-radius:9px;overflow:hidden;background:white;position:relative;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center}
 .card img{width:100%;height:100%;object-fit:contain;display:block}
 .card.owned{border-color:#4b9de0}
-.card.owned:after{content:"✓";position:absolute;right:5px;top:5px;width:25px;height:25px;border-radius:50%;background:#318ad4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:bold;box-shadow:0 1px 5px #3335}
+.card.owned:after{content:"✓";position:absolute;right:5px;top:5px;width:25px;height:25px;border-radius:50%;background:#318ad4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:bold}
 #grid.cols6{grid-template-columns:repeat(6,minmax(0,1fr));gap:3px}
 #grid.cols6 .card{border-radius:5px}
 @media(max-width:480px){main{padding:7px}.tools{padding:8px}select,button{padding:8px;font-size:14px}#grid{gap:5px}}
@@ -35,7 +35,7 @@ button.active{background:var(--blue);color:white;border-color:var(--blue)}
 <main>
 <section class="tools">
 <div class="line">
-<select id="series" aria-label="弾を選択">
+<select id="series">
 <option value="all">すべて</option>
 <option value="1">1弾</option>
 <option value="2">2弾</option>
@@ -52,126 +52,118 @@ button.active{background:var(--blue);color:white;border-color:var(--blue)}
 
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
-const grid=document.getElementById('grid');
-const series=document.getElementById('series');
-const progress=document.getElementById('progress');
+const grid = document.getElementById("grid");
+const seriesSelect = document.getElementById("series");
+const progress = document.getElementById("progress");
+const ownedKey = "aikatsuStarsOwned";
+let cards = [];
+let owned = JSON.parse(localStorage.getItem(ownedKey) || "{}");
+let imageFiles = {};
 
-let cards=[];
-let owned={};
+document.getElementById("c3").onclick = () => {
+  grid.classList.remove("cols6");
+  document.getElementById("c3").classList.add("active");
+  document.getElementById("c6").classList.remove("active");
+};
+document.getElementById("c6").onclick = () => {
+  grid.classList.add("cols6");
+  document.getElementById("c6").classList.add("active");
+  document.getElementById("c3").classList.remove("active");
+};
+document.getElementById("reset").onclick = () => {
+  if (!confirm("所持状態をすべてリセットしますか？")) return;
+  owned = {};
+  localStorage.setItem(ownedKey, JSON.stringify(owned));
+  render();
+};
+seriesSelect.onchange = render;
 
-try{
-  owned=JSON.parse(localStorage.getItem('starsOwnedV2')||'{}')||{};
-}catch(e){owned={};}
-
-function save(){
-  try{
-    localStorage.setItem('starsOwnedV2',JSON.stringify(owned));
-  }catch(e){}
-}
-
-function render(){
-  const s=series.value;
-  const list=cards.filter(c=>s==='all'||String(c.set)===s);
-  grid.innerHTML='';
-
-  for(const c of list){
-    const b=document.createElement('button');
-    b.type='button';
-    b.className='card'+(owned[c.id]?' owned':'');
-    b.setAttribute('aria-label',owned[c.id]?'所持済み':'未所持');
-
-    const im=document.createElement('img');
-    im.loading='lazy';
-    im.alt='';
-    im.src=c.image;
-    b.appendChild(im);
-
-    b.addEventListener('click',()=>{
-      owned[c.id]=!owned[c.id];
-      save();
-      b.classList.toggle('owned',!!owned[c.id]);
-      b.setAttribute('aria-label',owned[c.id]?'所持済み':'未所持');
-      updateProgress();
-    });
-
-    grid.appendChild(b);
+async function loadZip(url, setNo) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(url + " を読み込めません");
+  const zip = await JSZip.loadAsync(await response.arrayBuffer());
+  const files = Object.values(zip.files).filter(f => !f.dir);
+  for (const file of files) {
+    const name = file.name.split("/").pop();
+    imageFiles[setNo + "/" + name] = file;
   }
-  updateProgress();
 }
 
-function updateProgress(){
-  const s=series.value;
-  const list=cards.filter(c=>s==='all'||String(c.set)===s);
-  const n=list.filter(c=>owned[c.id]).length;
-  progress.textContent=
-    `${s==='all'?'すべて':s+'弾'}：${n} / ${list.length} 枚 所持`;
-}
+async function start() {
+  try {
+    progress.textContent = "カード情報を読み込み中…";
+    const response = await fetch("cards.json");
+    if (!response.ok) throw new Error("cards.json を読み込めません");
+    cards = await response.json();
 
-series.addEventListener('change',render);
+    progress.textContent = "画像ファイルを読み込み中…";
+    await loadZip("images1.zip", "1");
+    await loadZip("images2.zip", "2");
+    await loadZip("images3.zip", "3");
 
-document.getElementById('c3').addEventListener('click',()=>{
-  grid.classList.remove('cols6');
-  document.getElementById('c3').classList.add('active');
-  document.getElementById('c6').classList.remove('active');
-});
-
-document.getElementById('c6').addEventListener('click',()=>{
-  grid.classList.add('cols6');
-  document.getElementById('c6').classList.add('active');
-  document.getElementById('c3').classList.remove('active');
-});
-
-document.getElementById('reset').addEventListener('click',()=>{
-  if(confirm('保存した所持状態をすべてリセットしますか？')){
-    owned={};
-    save();
+    progress.textContent = "準備完了";
     render();
+  } catch (error) {
+    progress.textContent = "読み込みエラー：" + error.message;
+    console.error(error);
   }
-});
+}
 
-async function loadCards(){
-  try{
-    progress.textContent='画像を読み込み中…';
+function getSet(card) {
+  return String(card.set ?? card.series ?? "1");
+}
 
-    const [data,response]=await Promise.all([
-      fetch('cards.json').then(r=>{
-        if(!r.ok) throw Error('cards.json');
-        return r.json();
-      }),
-      fetch('images.zip')
-    ]);
+async function render() {
+  grid.innerHTML = "";
+  const selected = seriesSelect.value;
+  const filtered = cards.filter(card =>
+    selected === "all" || getSet(card) === selected
+  );
 
-    if(!response.ok) throw Error('images.zip');
+  progress.textContent = filtered.length + "枚表示中";
+  for (const card of filtered) {
+    const setNo = getSet(card);
+    const imageName = (card.image || "").split("/").pop();
+    const file = imageFiles[setNo + "/" + imageName];
 
-    const zip=await JSZip.loadAsync(await response.arrayBuffer());
-    cards=[];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "card" + (owned[card.id] ? " owned" : "");
+    button.setAttribute("aria-label", owned[card.id] ? "所持済み" : "未所持");
 
-    for(const c of data){
-      const filename=String(c.image).split('/').pop();
-      const file=zip.file(filename);
-      if(!file) continue;
+    const img = document.createElement("img");
+    img.alt = "";
+    img.loading = "lazy";
 
-      const blob=await file.async('blob');
-      const imageUrl=URL.createObjectURL(blob);
-
-      cards.push({
-        ...c,
-        set:String(c.set ?? c.series ?? ''),
-        image:imageUrl
-      });
+    if (file) {
+      file.async("blob").then(blob => {
+        img.src = URL.createObjectURL(blob);
+      }).catch(() => {});
+    } else {
+      img.alt = "画像なし";
     }
 
-    if(cards.length===0) throw Error('画像が見つかりません');
-    render();
-
-  }catch(e){
-    console.error(e);
-    progress.textContent=
-      '読み込み失敗：cards.json・images.zipの名前と中身を確認してね。';
+    button.appendChild(img);
+    button.onclick = () => {
+      owned[card.id] = !owned[card.id];
+      if (!owned[card.id]) delete owned[card.id];
+      localStorage.setItem(ownedKey, JSON.stringify(owned));
+      button.classList.toggle("owned", !!owned[card.id]);
+      button.setAttribute("aria-label", owned[card.id] ? "所持済み" : "未所持");
+      updateProgress(filtered);
+    };
+    grid.appendChild(button);
   }
+  updateProgress(filtered);
 }
 
-loadCards();
+function updateProgress(filtered) {
+  const count = filtered.filter(card => owned[card.id]).length;
+  progress.textContent = `${filtered.length}枚中 ${count}枚所持`;
+}
+
+start();
 </script>
 </body>
 </html>
+```
