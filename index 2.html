@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>アイカツスターズ！カードチェッカー</title>
+<style>
+:root{--blue:#4779c7;--pale:#edf4ff;--ink:#28364b;--line:#dce5f2}
+*{box-sizing:border-box}body{margin:0;background:#f6f8fc;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif}
+header{padding:22px 16px 18px;background:linear-gradient(135deg,#4e82d3,#8bb5f4);color:white;text-align:center}
+h1{font-size:22px;margin:0 0 6px}header p{margin:0;font-size:13px}
+main{max-width:1000px;margin:auto;padding:14px}
+.panel{background:white;border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 3px 12px #274d8210}
+.filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+label{font-size:13px;font-weight:700;display:block;margin-bottom:6px}
+select,input{width:100%;min-height:42px;border:1px solid #ccd8e8;border-radius:10px;background:white;padding:9px 10px;font:inherit;color:inherit}
+button{border:0;border-radius:10px;background:var(--blue);color:white;padding:10px 14px;font:inherit;font-weight:700}
+button.secondary{background:#eef2f8;color:#34445b}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.status{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.card{background:white;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.thumb{aspect-ratio:3/4;background:linear-gradient(135deg,#f1f5fc,#e3ecfa);display:flex;align-items:center;justify-content:center;color:#8193ac;font-size:13px;text-align:center;padding:8px}
+.thumb img{width:100%;height:100%;object-fit:contain}
+.details{padding:10px}.num{font-size:11px;color:#6d7f98}.name{font-size:14px;font-weight:700;margin:4px 0 8px;overflow-wrap:anywhere}
+.tags{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px}.tag{font-size:10px;background:#eef4ff;color:#44669c;border-radius:99px;padding:4px 7px}
+.owned{display:flex;align-items:center;gap:7px;font-size:12px}.owned input{width:18px;min-height:auto;height:18px}
+.note{font-size:12px;line-height:1.6;color:#65758b}
+@media(min-width:650px){.cards{grid-template-columns:repeat(4,minmax(0,1fr))}.filters{grid-template-columns:repeat(4,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<header><h1>アイカツスターズ！</h1><p>カードチェックリスト</p></header>
+<main>
+<section class="panel">
+  <div class="filters">
+    <div><label for="type">タイプ</label><select id="type"><option>すべて</option><option>キュート</option><option>クール</option><option>セクシー</option><option>ポップ</option></select></div>
+    <div><label for="rarity">レアリティ</label><select id="rarity"><option>すべて</option><option>ノーマル</option><option>レア</option><option>プレミアム</option><option>キャンペーン</option></select></div>
+    <div><label for="category">カテゴリ</label><select id="category"><option>すべて</option><option>トップス</option><option>ボトムス</option><option>シューズ</option><option>アクセ</option></select></div>
+    <div><label for="keyword">カード名・番号</label><input id="keyword" placeholder="キーワードを入力"></div>
+  </div>
+  <div class="tools"><button id="reset" class="secondary" type="button">条件をリセット</button><button id="export" class="secondary" type="button">所持データを書き出す</button><label for="importFile" style="display:inline-flex;align-items:center;background:#eef2f8;color:#34445b;border-radius:10px;padding:10px 14px;margin:0;cursor:pointer">所持データを読み込む</label><input id="importFile" type="file" accept="application/json" hidden></div>
+</section>
+<section class="panel status"><span id="count">サンプルカードを表示中</span><span class="note">※画像・カード情報は後から追加できます。</span></section>
+<section id="cards" class="cards"></section>
+</main>
+<script>
+const sampleCards = [
+ {id:"sample-1",number:"サンプル 001",name:"カード情報の登録例",type:"キュート",rarity:"ノーマル",category:"トップス"},
+ {id:"sample-2",number:"サンプル 002",name:"カード情報の登録例",type:"クール",rarity:"レア",category:"ボトムス"},
+ {id:"sample-3",number:"サンプル 003",name:"カード情報の登録例",type:"セクシー",rarity:"プレミアム",category:"シューズ"},
+ {id:"sample-4",number:"サンプル 004",name:"カード情報の登録例",type:"ポップ",rarity:"キャンペーン",category:"アクセ"}
+];
+let owned = {};
+const $ = id => document.getElementById(id);
+function render(){
+ const t=$("type").value,r=$("rarity").value,c=$("category").value,k=$("keyword").value.trim().toLowerCase();
+ const filtered=sampleCards.filter(x=>(t==="すべて"||x.type===t)&&(r==="すべて"||x.rarity===r)&&(c==="すべて"||x.category===c)&&(!k||(x.name+" "+x.number).toLowerCase().includes(k)));
+ $("count").textContent=`${filtered.length}枚を表示（登録済みサンプル ${sampleCards.length}枚）`;
+ $("cards").innerHTML=filtered.map(x=>`<article class="card"><div class="thumb">カード画像<br>追加予定</div><div class="details"><div class="num">${x.number}</div><div class="name">${x.name}</div><div class="tags"><span class="tag">${x.type}</span><span class="tag">${x.rarity}</span><span class="tag">${x.category}</span></div><label class="owned"><input type="checkbox" data-owned="${x.id}" ${owned[x.id]?"checked":""}> 所持済み</label></div></article>`).join("");
+ if(!filtered.length)$("cards").innerHTML='<p class="note">条件に合うカードがありません。</p>';
+}
+["type","rarity","category","keyword"].forEach(id=>$(id).addEventListener(id==="keyword"?"input":"change",render));
+$("cards").addEventListener("change",e=>{const id=e.target.dataset.owned;if(id){owned[id]=e.target.checked;saveOwned();}});
+function saveOwned(){try{localStorage.setItem("aikatsuStarsOwned",JSON.stringify(owned))}catch(e){}}
+try{owned=JSON.parse(localStorage.getItem("aikatsuStarsOwned")||"{}")||{}}catch(e){owned={}}
+$("reset").onclick=()=>{$("type").value="すべて";$("rarity").value="すべて";$("category").value="すべて";$("keyword").value="";render()};
+$("export").onclick=()=>{const blob=new Blob([JSON.stringify(owned,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="aikatsu-stars-owned.json";a.click();URL.revokeObjectURL(a.href)};
+$("importFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const obj=JSON.parse(await f.text());if(obj&&typeof obj==="object"&&!Array.isArray(obj)){owned=obj;saveOwned();render();alert("所持データを読み込みました。")}}catch(err){alert("ファイルを読み込めませんでした。")}e.target.value=""};
+render();
+</script>
+</body>
+</html>
