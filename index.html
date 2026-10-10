@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="ja">
 <head>
@@ -27,41 +28,150 @@ button.active{background:var(--blue);color:white;border-color:var(--blue)}
 </style>
 </head>
 <body>
-<header><h1>アイカツスターズ！所持チェック</h1><div>カードをタップして所持・未所持を切り替え</div></header>
+<header>
+<h1>アイカツスターズ！所持チェック</h1>
+<div>カードをタップして所持・未所持を切り替え</div>
+</header>
 <main>
 <section class="tools">
 <div class="line">
-<select id="series" aria-label="弾を選択"><option value="all">すべて</option><option value="1">1弾</option><option value="2">2弾</option><option value="3">3弾</option></select>
-<button id="c3" class="active" type="button">3列</button><button id="c6" type="button">6列</button>
+<select id="series" aria-label="弾を選択">
+<option value="all">すべて</option>
+<option value="1">1弾</option>
+<option value="2">2弾</option>
+<option value="3">3弾</option>
+</select>
+<button id="c3" class="active" type="button">3列</button>
+<button id="c6" type="button">6列</button>
 <button id="reset" type="button">所持状態をリセット</button>
 </div>
 <div id="progress">読み込み中…</div>
 </section>
 <div id="grid"></div>
 </main>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
-const grid=document.getElementById('grid'), series=document.getElementById('series'), progress=document.getElementById('progress');
-let cards=[], owned={}; try{owned=JSON.parse(localStorage.getItem('starsOwnedV2')||'{}')||{}}catch(e){}
-function save(){try{localStorage.setItem('starsOwnedV2',JSON.stringify(owned))}catch(e){}}
+const grid=document.getElementById('grid');
+const series=document.getElementById('series');
+const progress=document.getElementById('progress');
+
+let cards=[];
+let owned={};
+
+try{
+  owned=JSON.parse(localStorage.getItem('starsOwnedV2')||'{}')||{};
+}catch(e){owned={};}
+
+function save(){
+  try{
+    localStorage.setItem('starsOwnedV2',JSON.stringify(owned));
+  }catch(e){}
+}
+
 function render(){
- const s=series.value, list=cards.filter(c=>s==='all'||c.set===s);
- grid.innerHTML='';
- for(const c of list){
-  const b=document.createElement('button'); b.type='button'; b.className='card'+(owned[c.id]?' owned':''); b.setAttribute('aria-label',owned[c.id]?'所持済み':'未所持');
-  const im=document.createElement('img'); im.loading='lazy'; im.alt=''; im.src=c.image; b.appendChild(im);
-  b.addEventListener('click',()=>{owned[c.id]=!owned[c.id];save();b.classList.toggle('owned',!!owned[c.id]);b.setAttribute('aria-label',owned[c.id]?'所持済み':'未所持');updateProgress()});
-  grid.appendChild(b);
- }
- updateProgress();
+  const s=series.value;
+  const list=cards.filter(c=>s==='all'||String(c.set)===s);
+  grid.innerHTML='';
+
+  for(const c of list){
+    const b=document.createElement('button');
+    b.type='button';
+    b.className='card'+(owned[c.id]?' owned':'');
+    b.setAttribute('aria-label',owned[c.id]?'所持済み':'未所持');
+
+    const im=document.createElement('img');
+    im.loading='lazy';
+    im.alt='';
+    im.src=c.image;
+    b.appendChild(im);
+
+    b.addEventListener('click',()=>{
+      owned[c.id]=!owned[c.id];
+      save();
+      b.classList.toggle('owned',!!owned[c.id]);
+      b.setAttribute('aria-label',owned[c.id]?'所持済み':'未所持');
+      updateProgress();
+    });
+
+    grid.appendChild(b);
+  }
+  updateProgress();
 }
+
 function updateProgress(){
- const s=series.value, list=cards.filter(c=>s==='all'||c.set===s), n=list.filter(c=>owned[c.id]).length;
- progress.textContent=`${s==='all'?'すべて':s+'弾'}：${n} / ${list.length} 枚 所持`;
+  const s=series.value;
+  const list=cards.filter(c=>s==='all'||String(c.set)===s);
+  const n=list.filter(c=>owned[c.id]).length;
+  progress.textContent=
+    `${s==='all'?'すべて':s+'弾'}：${n} / ${list.length} 枚 所持`;
 }
+
 series.addEventListener('change',render);
-document.getElementById('c3').addEventListener('click',()=>{grid.classList.remove('cols6');document.getElementById('c3').classList.add('active');document.getElementById('c6').classList.remove('active')});
-document.getElementById('c6').addEventListener('click',()=>{grid.classList.add('cols6');document.getElementById('c6').classList.add('active');document.getElementById('c3').classList.remove('active')});
-document.getElementById('reset').addEventListener('click',()=>{if(confirm('保存した所持状態をすべてリセットしますか？')){owned={};save();render()}});
-fetch('cards.json').then(r=>{if(!r.ok)throw Error();return r.json()}).then(d=>{cards=d;render()}).catch(()=>{progress.textContent='cards.jsonを読み込めませんでした。index.htmlとcards.jsonを同じ場所に置いてください。'});
+
+document.getElementById('c3').addEventListener('click',()=>{
+  grid.classList.remove('cols6');
+  document.getElementById('c3').classList.add('active');
+  document.getElementById('c6').classList.remove('active');
+});
+
+document.getElementById('c6').addEventListener('click',()=>{
+  grid.classList.add('cols6');
+  document.getElementById('c6').classList.add('active');
+  document.getElementById('c3').classList.remove('active');
+});
+
+document.getElementById('reset').addEventListener('click',()=>{
+  if(confirm('保存した所持状態をすべてリセットしますか？')){
+    owned={};
+    save();
+    render();
+  }
+});
+
+async function loadCards(){
+  try{
+    progress.textContent='画像を読み込み中…';
+
+    const [data,response]=await Promise.all([
+      fetch('cards.json').then(r=>{
+        if(!r.ok) throw Error('cards.json');
+        return r.json();
+      }),
+      fetch('images.zip')
+    ]);
+
+    if(!response.ok) throw Error('images.zip');
+
+    const zip=await JSZip.loadAsync(await response.arrayBuffer());
+    cards=[];
+
+    for(const c of data){
+      const filename=String(c.image).split('/').pop();
+      const file=zip.file(filename);
+      if(!file) continue;
+
+      const blob=await file.async('blob');
+      const imageUrl=URL.createObjectURL(blob);
+
+      cards.push({
+        ...c,
+        set:String(c.set ?? c.series ?? ''),
+        image:imageUrl
+      });
+    }
+
+    if(cards.length===0) throw Error('画像が見つかりません');
+    render();
+
+  }catch(e){
+    console.error(e);
+    progress.textContent=
+      '読み込み失敗：cards.json・images.zipの名前と中身を確認してね。';
+  }
+}
+
+loadCards();
 </script>
-</body></html>
+</body>
+</html>
