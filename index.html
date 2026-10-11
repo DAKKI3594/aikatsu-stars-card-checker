@@ -1,3 +1,4 @@
+```html
 <!doctype html>
 <html lang="ja">
 <head>
@@ -65,6 +66,12 @@ let cards=[];
 let owned={};
 let imageFiles={};
 let renderVersion=0;
+
+// 非表示にするカード番号
+const excludedIds = new Set([
+  ...Array.from({length:36},(_,i)=>`2-${299+i}`),
+  ...Array.from({length:40},(_,i)=>`3-${293+i}`)
+]);
 
 try {
   owned=JSON.parse(localStorage.getItem(ownedKey)||"{}");
@@ -136,6 +143,9 @@ function render(){
   const selectedStatus=statusSelect.value;
 
   const filtered=cards.filter(card=>{
+    // 指定された76枚を表示しない
+    if(excludedIds.has(String(card.id))) return false;
+
     const seriesMatch=selectedSeries==="all"||getSet(card)===selectedSeries;
     const isOwned=!!owned[card.id];
     const statusMatch=selectedStatus==="all"||
@@ -186,7 +196,8 @@ function render(){
 function updateProgress(){
   const selectedSeries=seriesSelect.value;
   const base=cards.filter(card=>
-    selectedSeries==="all"||getSet(card)===selectedSeries
+    !excludedIds.has(String(card.id)) &&
+    (selectedSeries==="all"||getSet(card)===selectedSeries)
   );
   const count=base.filter(card=>owned[card.id]).length;
   progress.textContent=`表示 ${Array.from(grid.children).length}枚 ／ 所持 ${count} / ${base.length}枚`;
