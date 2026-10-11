@@ -15,9 +15,8 @@ main{max-width:1100px;margin:auto;padding:10px}
 .line{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 select,button{font:inherit;border:1px solid #c7ddef;border-radius:10px;padding:9px;background:#fff;color:var(--ink)}
 button.active{background:var(--blue);color:white;border-color:var(--blue)}
-button:disabled{opacity:.55}
 #progress{font-size:12px;margin-top:8px}
-#syncStatus{font-size:12px;margin-top:6px;color:#3478b4}
+#loginStatus{font-size:13px;margin:8px 0;color:#24435d}
 #grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:12px}
 .card{padding:0;border:2px solid transparent;border-radius:9px;overflow:hidden;background:white;position:relative;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center}
 .card img{width:100%;height:100%;object-fit:contain;display:block}
@@ -33,345 +32,107 @@ button:disabled{opacity:.55}
 <h1>アイカツスターズ！所持チェック</h1>
 <div>カードをタップして所持・未所持を切り替え</div>
 </header>
-
 <main>
 <section class="tools">
 <div class="line">
-<button id="login" type="button">Googleログイン</button>
-<button id="logout" type="button" hidden>ログアウト</button>
-<select id="series" aria-label="弾を選択">
-<option value="all">すべての弾</option>
-<option value="1">1弾</option>
-<option value="2">2弾</option>
-<option value="3">3弾</option>
-</select>
-<select id="status" aria-label="所持状況">
-<option value="all">すべて表示</option>
-<option value="owned">所持済みだけ</option>
-<option value="unowned">未所持だけ</option>
-</select>
-<button id="c3" class="active" type="button">3列</button>
-<button id="c6" type="button">6列</button>
-<button id="reset" type="button">所持状態をリセット</button>
+<select id="series" aria-label="弾を選択"><option value="all">すべての弾</option><option value="1">1弾</option><option value="2">2弾</option><option value="3">3弾</option></select>
+<select id="status" aria-label="所持状況"><option value="all">すべて表示</option><option value="owned">所持済みだけ</option><option value="unowned">未所持だけ</option></select>
+<button id="c3" class="active" type="button">3列</button><button id="c6" type="button">6列</button><button id="reset" type="button">所持状態をリセット</button>
 </div>
-<div id="syncStatus">Safari内のデータを確認中…</div>
+<div class="line" style="margin-top:8px"><button id="login" type="button">Googleログイン</button><button id="logout" type="button" hidden>ログアウト</button></div>
+<div id="loginStatus">未ログイン（所持データはこの端末に保存されます）</div>
 <div id="progress">読み込み中…</div>
 </section>
 <div id="grid"></div>
 </main>
-
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyBJv3OxAeIHluwUWeqo5b2gqcZpyE3RVl4",
-  authDomain: "aikatsu-stars-card-checker.firebaseapp.com",
-  projectId: "aikatsu-stars-card-checker",
-  storageBucket: "aikatsu-stars-card-checker.firebasestorage.app",
-  messagingSenderId: "824065060047",
-  appId: "1:824065060047:web:c1d470456783a582595bba",
-  measurementId: "G-GLNZCV3X70"
-};
-
+const firebaseConfig={apiKey:"AIzaSyBJv3OxAeIHluwUWeqo5b2gqcZpyE3RV4",authDomain:"aikatsu-stars-card-checker.firebaseapp.com",projectId:"aikatsu-stars-card-checker",storageBucket:"aikatsu-stars-card-checker.firebasestorage.app",messagingSenderId:"824065060047",appId:"1:824065060047:web:c1d470456783a582595bba",measurementId:"G-GLNZCV3X70"};
 firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+const auth=firebase.auth();
+const db=firebase.firestore();
+const loginButton=document.getElementById("login");
+const logoutButton=document.getElementById("logout");
+const loginStatus=document.getElementById("loginStatus");
+let currentUser=null;
+let cloudReady=false;
+let cloudSyncChain=Promise.resolve();
+const ownedKey="aikatsuStarsOwned";
 
-const grid = document.getElementById("grid");
-const seriesSelect = document.getElementById("series");
-const statusSelect = document.getElementById("status");
-const progress = document.getElementById("progress");
-const syncStatus = document.getElementById("syncStatus");
-const loginButton = document.getElementById("login");
-const logoutButton = document.getElementById("logout");
-const ownedKey = "aikatsuStarsOwned";
-
-let cards = [];
-let owned = {};
-let imageFiles = {};
-let renderVersion = 0;
-let currentUser = null;
-let authChecked = false;
-let syncingCloud = true;
-
-const excludedIds = new Set([
-  ...Array.from({length:36},(_,i)=>`2-${299+i}`),
-  ...Array.from({length:40},(_,i)=>`3-${293+i}`)
-]);
-
-try {
-  owned = JSON.parse(localStorage.getItem(ownedKey) || "{}");
-  if (!owned || typeof owned !== "object" || Array.isArray(owned)) owned = {};
-} catch(e) {
-  owned = {};
-}
-
-function setStatus(message) {
-  syncStatus.textContent = message;
-}
-
-function saveLocal() {
-  localStorage.setItem(ownedKey, JSON.stringify(owned));
-}
-
-function userDocument() {
-  return db.collection("users").doc(currentUser.uid);
-}
-
-async function saveCloud() {
-  if (!currentUser || !authChecked || syncingCloud) return;
-
-  try {
-    setStatus("クラウドに保存中…");
-    await userDocument().set({
-      owned: owned,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, {merge:true});
-    setStatus("Googleログイン中・クラウド保存済み");
-  } catch(error) {
+loginButton.onclick=async()=>{
+  loginButton.disabled=true;
+  loginStatus.textContent="Googleログイン中…";
+  try{
+    await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+  }catch(error){
+    if(error.code==="auth/popup-blocked"||error.code==="auth/operation-not-supported-in-this-environment"){
+      try{await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());return;}
+      catch(redirectError){error=redirectError;}
+    }
+    loginStatus.textContent="ログインエラー："+(error.message||error.code||"不明なエラー");
     console.error(error);
-    setStatus("クラウド保存に失敗しました。通信と設定を確認してね。");
-  }
-}
-
-loginButton.onclick = async () => {
-  try {
-    setStatus("Googleログイン画面を開いています…");
-    const provider = new firebase.auth.GoogleAuthProvider();
-    await auth.signInWithRedirect(provider);
-  } catch(error) {
-    console.error(error);
-    setStatus("ログインできませんでした：" + error.message);
-  }
+  }finally{loginButton.disabled=false;}
 };
+logoutButton.onclick=async()=>{try{await auth.signOut();}catch(e){loginStatus.textContent="ログアウトできませんでした："+e.message;}};
 
-logoutButton.onclick = async () => {
-  try {
-    await auth.signOut();
-  } catch(error) {
-    setStatus("ログアウトできませんでした。");
-    console.error(error);
-  }
-};
-
-auth.getRedirectResult().catch(error => {
+function saveLocal(){
+  try{localStorage.setItem(ownedKey,JSON.stringify(owned));return true;}
+  catch(e){alert("所持データを保存できませんでした。Safariの空き容量などを確認してね。");return false;}
+}
+function saveCloud(){
+  if(!currentUser||!cloudReady)return Promise.resolve();
+  const snapshot=JSON.stringify(owned);
+  cloudSyncChain=cloudSyncChain.then(()=>db.collection("users").doc(currentUser.uid).set({owned:JSON.parse(snapshot),updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})).catch(error=>{
+    console.error(error);loginStatus.textContent="ログイン済み／クラウド保存エラー："+(error.message||error.code);
+  });
+  return cloudSyncChain;
+}
+auth.getRedirectResult().catch(error=>{
   console.error(error);
-  setStatus("ログインエラー：" + error.message);
+  loginStatus.textContent="ログインエラー："+(error.message||error.code||"不明なエラー");
 });
-
-auth.onAuthStateChanged(async user => {
-  currentUser = user;
-  authChecked = true;
-
-  if (!user) {
-    syncingCloud = false;
-    loginButton.hidden = false;
-    logoutButton.hidden = true;
-    setStatus("未ログイン：このSafariに保存しています");
-    return;
-  }
-
-  syncingCloud = true;
-  loginButton.hidden = true;
-  logoutButton.hidden = false;
-  setStatus("クラウドの所持データを確認中…");
-
-  try {
-    const doc = await userDocument().get();
-
-    if (doc.exists && doc.data().owned &&
-        typeof doc.data().owned === "object") {
-      // 既にクラウドデータがあれば、そちらを読み込む
-      owned = doc.data().owned;
-      saveLocal();
-    } else {
-      // 初回ログインなら、今あるSafariのデータをクラウドへ移す
-      await userDocument().set({
-        owned: owned,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+auth.onAuthStateChanged(async user=>{
+  currentUser=user;cloudReady=false;
+  if(!user){loginButton.hidden=false;logoutButton.hidden=true;loginStatus.textContent="未ログイン（所持データはこの端末に保存されます）";return;}
+  loginButton.hidden=true;logoutButton.hidden=false;
+  loginStatus.textContent="ログイン確認中…";
+  try{
+    const ref=db.collection("users").doc(user.uid);
+    const doc=await ref.get();
+    if(doc.exists&&doc.data().owned&&typeof doc.data().owned==="object"){
+      // 初回同期では端末とクラウドの所持カードをまとめ、どちらのデータも失わない
+      owned={...doc.data().owned,...owned};
     }
-
-    syncingCloud = false;
-    setStatus("Googleログイン中・クラウド保存済み");
+    if(!saveLocal())return;
+    cloudReady=true;
+    await saveCloud();
+    loginStatus.textContent="ログイン済み："+(user.displayName||user.email||"Googleアカウント")+"（クラウド同期中）";
     render();
-  } catch(error) {
-    console.error(error);
-    syncingCloud = false;
-    setStatus("同期に失敗しました。Firestoreのルールや通信を確認してね。");
+  }catch(error){
+    console.error(error);loginStatus.textContent="ログイン済み／同期エラー："+(error.message||error.code||"不明なエラー");
   }
 });
 
-document.getElementById("c3").onclick = () => {
-  grid.classList.remove("cols6");
-  document.getElementById("c3").classList.add("active");
-  document.getElementById("c6").classList.remove("active");
-};
-
-document.getElementById("c6").onclick = () => {
-  grid.classList.add("cols6");
-  document.getElementById("c6").classList.add("active");
-  document.getElementById("c3").classList.remove("active");
-};
-
-document.getElementById("reset").onclick = async () => {
-  if (!confirm("所持状態をすべてリセットしますか？")) return;
-  if (syncingCloud) {
-    alert("同期が終わってから操作してね。");
-    return;
-  }
-
-  const previousOwned = owned;
-  owned = {};
-
-  try {
-    saveLocal();
-  } catch(error) {
-    owned = previousOwned;
-    alert("保存できませんでした。");
-    return;
-  }
-
-  render();
-  await saveCloud();
-};
-
-seriesSelect.onchange = render;
-statusSelect.onchange = render;
-
-async function loadZip(url, setNo) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(url + " が見つかりません");
-
-  const zip = await JSZip.loadAsync(await response.arrayBuffer());
-  Object.values(zip.files).forEach(file => {
-    if (file.dir) return;
-    const name = file.name.split("/").pop();
-    imageFiles[setNo + "/" + name] = file;
-  });
-}
-
-async function start() {
-  try {
-    progress.textContent = "カード情報を読み込み中…";
-    const response = await fetch("cards.json");
-    if (!response.ok) throw new Error("cards.json が見つかりません");
-    cards = await response.json();
-
-    progress.textContent = "1弾の画像を読み込み中…";
-    await loadZip("images1.zip", "1");
-    progress.textContent = "2弾の画像を読み込み中…";
-    await loadZip("images2.zip", "2");
-    progress.textContent = "3弾の画像を読み込み中…";
-    await loadZip("images3.zip", "3");
-
-    render();
-  } catch(error) {
-    progress.textContent = "読み込みエラー：" + error.message;
-    console.error(error);
-  }
-}
-
-function getSet(card) {
-  return String(card.set ?? card.series ?? "1");
-}
-
-function isExcluded(card) {
-  return excludedIds.has(String(card.id));
-}
-
-function render() {
-  const version = ++renderVersion;
-  grid.innerHTML = "";
-
-  const selectedSeries = seriesSelect.value;
-  const selectedStatus = statusSelect.value;
-
-  const filtered = cards.filter(card => {
-    if (isExcluded(card)) return false;
-
-    const seriesMatch =
-      selectedSeries === "all" || getSet(card) === selectedSeries;
-    const isOwned = !!owned[card.id];
-    const statusMatch = selectedStatus === "all" ||
-      (selectedStatus === "owned" && isOwned) ||
-      (selectedStatus === "unowned" && !isOwned);
-
-    return seriesMatch && statusMatch;
-  });
-
-  const fragment = document.createDocumentFragment();
-
-  filtered.forEach(card => {
-    const setNo = getSet(card);
-    const imageName = (card.image || "").split("/").pop();
-    const file = imageFiles[setNo + "/" + imageName];
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "card" + (owned[card.id] ? " owned" : "");
-    button.setAttribute("aria-label", owned[card.id] ? "所持済み" : "未所持");
-
-    const img = document.createElement("img");
-    img.alt = "";
-    img.loading = "lazy";
-
-    if (file) {
-      file.async("blob").then(blob => {
-        if (version !== renderVersion) return;
-        img.src = URL.createObjectURL(blob);
-      }).catch(() => {});
-    }
-
-    button.appendChild(img);
-
-    button.onclick = async () => {
-      if (!authChecked || syncingCloud) return;
-
-      const wasOwned = !!owned[card.id];
-
-      if (wasOwned) delete owned[card.id];
-      else owned[card.id] = true;
-
-      try {
-        saveLocal();
-      } catch(error) {
-        if (wasOwned) owned[card.id] = true;
-        else delete owned[card.id];
-        alert("所持データを保存できませんでした。");
-        return;
-      }
-
-      button.classList.toggle("owned", !wasOwned);
-      button.setAttribute("aria-label", !wasOwned ? "所持済み" : "未所持");
-      updateProgress();
-      await saveCloud();
-    };
-
-    fragment.appendChild(button);
-  });
-
-  grid.appendChild(fragment);
-  updateProgress();
-}
-
-function updateProgress() {
-  const selectedSeries = seriesSelect.value;
-
-  const base = cards.filter(card =>
-    !isExcluded(card) &&
-    (selectedSeries === "all" || getSet(card) === selectedSeries)
-  );
-
-  const count = base.filter(card => !!owned[card.id]).length;
-
-  progress.textContent =
-    `表示 ${grid.children.length}枚 ／ 所持 ${count} / ${base.length}枚`;
-}
-
+const grid=document.getElementById("grid");
+const seriesSelect=document.getElementById("series");
+const statusSelect=document.getElementById("status");
+const progress=document.getElementById("progress");
+let cards=[];let owned={};let imageFiles={};let renderVersion=0;
+const excludedIds=new Set([...Array.from({length:36},(_,i)=>`2-${299+i}`),...Array.from({length:40},(_,i)=>`3-${293+i}`)]);
+try{owned=JSON.parse(localStorage.getItem(ownedKey)||"{}");if(!owned||typeof owned!=="object"||Array.isArray(owned))owned={};}catch(e){owned={};}
+document.getElementById("c3").onclick=()=>{grid.classList.remove("cols6");document.getElementById("c3").classList.add("active");document.getElementById("c6").classList.remove("active");};
+document.getElementById("c6").onclick=()=>{grid.classList.add("cols6");document.getElementById("c6").classList.add("active");document.getElementById("c3").classList.remove("active");};
+document.getElementById("reset").onclick=()=>{if(!confirm("所持状態をすべてリセットしますか？"))return;owned={};if(!saveLocal())return;render();saveCloud();};
+seriesSelect.onchange=render;statusSelect.onchange=render;
+async function loadZip(url,setNo){const response=await fetch(url);if(!response.ok)throw new Error(url+" が見つかりません");const zip=await JSZip.loadAsync(await response.arrayBuffer());Object.values(zip.files).forEach(file=>{if(file.dir)return;const name=file.name.split("/").pop();imageFiles[setNo+"/"+name]=file;});}
+async function start(){try{progress.textContent="カード情報を読み込み中…";const response=await fetch("cards.json");if(!response.ok)throw new Error("cards.json が見つかりません");cards=await response.json();progress.textContent="1弾の画像を読み込み中…";await loadZip("images1.zip","1");progress.textContent="2弾の画像を読み込み中…";await loadZip("images2.zip","2");progress.textContent="3弾の画像を読み込み中…";await loadZip("images3.zip","3");render();}catch(error){progress.textContent="読み込みエラー："+error.message;console.error(error);}}
+function getSet(card){return String(card.set??card.series??"1");}
+function isExcluded(card){return excludedIds.has(String(card.id));}
+function render(){const version=++renderVersion;grid.innerHTML="";const selectedSeries=seriesSelect.value;const selectedStatus=statusSelect.value;const filtered=cards.filter(card=>{if(isExcluded(card))return false;const seriesMatch=selectedSeries==="all"||getSet(card)===selectedSeries;const isOwned=!!owned[card.id];const statusMatch=selectedStatus==="all"||(selectedStatus==="owned"&&isOwned)||(selectedStatus==="unowned"&&!isOwned);return seriesMatch&&statusMatch;});const fragment=document.createDocumentFragment();filtered.forEach(card=>{const setNo=getSet(card);const imageName=(card.image||"").split("/").pop();const file=imageFiles[setNo+"/"+imageName];const button=document.createElement("button");button.type="button";button.className="card"+(owned[card.id]?" owned":"");button.setAttribute("aria-label",owned[card.id]?"所持済み":"未所持");const img=document.createElement("img");img.alt="";img.loading="lazy";if(file){file.async("blob").then(blob=>{if(version!==renderVersion)return;img.src=URL.createObjectURL(blob);}).catch(()=>{});}button.appendChild(img);button.onclick=()=>{const wasOwned=!!owned[card.id];if(wasOwned)delete owned[card.id];else owned[card.id]=true;if(!saveLocal()){if(wasOwned)owned[card.id]=true;else delete owned[card.id];return;}button.classList.toggle("owned",!wasOwned);button.setAttribute("aria-label",!wasOwned?"所持済み":"未所持");updateProgress();saveCloud();};fragment.appendChild(button);});grid.appendChild(fragment);updateProgress();}
+function updateProgress(){const selectedSeries=seriesSelect.value;const base=cards.filter(card=>!isExcluded(card)&&(selectedSeries==="all"||getSet(card)===selectedSeries));const count=base.filter(card=>!!owned[card.id]).length;progress.textContent=`表示 ${grid.children.length}枚 ／ 所持 ${count} / ${base.length}枚`;}
 start();
 </script>
 </body>
